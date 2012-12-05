@@ -50,6 +50,12 @@
            for execution with using provided scope -->
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.maven</groupId>
+      <artifactId>maven-core</artifactId>
+      <version>3.0.4</version>
+      <scope>provided</scope>
+    </dependency>
     <!-- generated help mojo has a dependency to plexus-utils -->
     <dependency>
       <groupId>org.codehaus.plexus</groupId>

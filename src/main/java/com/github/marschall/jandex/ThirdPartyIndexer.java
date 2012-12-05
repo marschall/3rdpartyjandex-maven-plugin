@@ -3,13 +3,14 @@ package com.github.marschall.jandex;
 import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.READ;
 import static java.nio.file.StandardOpenOption.WRITE;
+import static org.apache.maven.artifact.Artifact.SCOPE_COMPILE;
+import static org.apache.maven.artifact.Artifact.SCOPE_RUNTIME;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
-import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
@@ -20,13 +21,17 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.maven.artifact.Artifact;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Execute;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.plugins.annotations.ResolutionScope;
+import org.apache.maven.project.MavenProject;
 import org.jboss.jandex.Index;
 import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
@@ -44,9 +49,16 @@ import org.jboss.jandex.Indexer;
  * @see https://github.com/jdcasey/jandex-maven-plugin
  * @see http://maven.apache.org/plugin-tools/maven-plugin-plugin/examples/using-annotations.html
  */
-@Mojo(name = "index", threadSafe = true)
-@Execute(goal = "index", phase = LifecyclePhase.PACKAGE)
+@Mojo(name = "index",
+	threadSafe = true,
+	defaultPhase = LifecyclePhase.PREPARE_PACKAGE,
+	requiresDependencyCollection = ResolutionScope.COMPILE_PLUS_RUNTIME)
+@Execute(goal = "index",
+	phase = LifecyclePhase.PREPARE_PACKAGE)
 public class ThirdPartyIndexer extends AbstractMojo {
+	
+    @Component
+    private MavenProject project;
 	
 	
 	/**
@@ -57,21 +69,31 @@ public class ThirdPartyIndexer extends AbstractMojo {
 
 	@Override
 	public void execute() throws MojoExecutionException, MojoFailureException {
-		Path archtiveFolderPath = archiveFolder.toPath();
+		Path archtiveFolderPath = this.archiveFolder.toPath();
 		if (!Files.exists(archtiveFolderPath)) {
-			throw new MojoFailureException("folder " + archtiveFolderPath + " does not exist");
+			try {
+				Files.createDirectories(archtiveFolderPath);
+			} catch (IOException e) {
+				throw new MojoExecutionException("could not create archive folder " + this.archiveFolder, e);
+			}
 		}
 		try {
-			indexJarsInFolder(archtiveFolderPath);
+			indexDependencies();
 		} catch (IOException e) {
 			throw new MojoExecutionException("could not create indices", e);
 		}
 	}
 	
-	private void indexJarsInFolder(Path folder) throws IOException {
-		try (DirectoryStream<Path> stream = Files.newDirectoryStream(folder, "*.jar")) {
-			for (Path jar : stream) {
-				createIndex(jar);
+	
+	private void indexDependencies() throws IOException {
+		for (Artifact artifact : this.project.getArtifacts()) {
+			String type = artifact.getType();
+			if ("jar".equals(type)) {
+				String scope = artifact.getScope();
+				if (SCOPE_COMPILE.equals(scope) || SCOPE_RUNTIME.equals(scope)) {
+					Path artifactPath = artifact.getFile().toPath();
+					createIndex(artifactPath);
+				}
 			}
 		}
 	}
@@ -82,7 +104,8 @@ public class ThirdPartyIndexer extends AbstractMojo {
 			return;
 		}
 		
-		Path indexFile = jar.resolveSibling(jar.getFileName().toString() + ".index");
+		// REVIEW may fail for SNAPSHOT dependencies
+		Path indexFile = this.archiveFolder.toPath().resolve(jar.getFileName().toString() + ".index");
 		try (OutputStream outputStream = Files.newOutputStream(indexFile, WRITE, CREATE)) {
 			IndexWriter indexWriter = new IndexWriter(outputStream);
 			// IndexWriter does buffering
