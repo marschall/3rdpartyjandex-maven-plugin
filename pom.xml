@@ -39,7 +39,7 @@
     <dependency>
       <groupId>org.apache.maven</groupId>
       <artifactId>maven-plugin-api</artifactId>
-      <version>3.0.4</version>
+      <version>3.1.1</version>
     </dependency>
     <!-- dependencies to annotations -->
     <dependency>
@@ -53,20 +53,20 @@
     <dependency>
       <groupId>org.apache.maven</groupId>
       <artifactId>maven-core</artifactId>
-      <version>3.0.4</version>
+      <version>3.1.1</version>
       <scope>provided</scope>
     </dependency>
     <!-- generated help mojo has a dependency to plexus-utils -->
     <dependency>
       <groupId>org.codehaus.plexus</groupId>
       <artifactId>plexus-utils</artifactId>
-      <version>3.0.10</version>
+      <version>3.0.15</version>
       <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.jboss</groupId>
       <artifactId>jandex</artifactId>
-      <version>1.0.3.Final</version>
+      <version>1.1.0.Final</version>
     </dependency>
   </dependencies>
   
@@ -128,11 +128,7 @@
       <plugins>
         <plugin>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>2.5.1</version>
-        </plugin>
-        <plugin>
-          <artifactId>maven-shade-plugin</artifactId>
-          <version>2.0</version>
+          <version>3.1</version>
         </plugin>
         <plugin>
           <artifactId>maven-jar-plugin</artifactId>
@@ -144,7 +140,7 @@
         </plugin>
         <plugin>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>2.9</version>
+          <version>2.9.1</version>
         </plugin>
         <plugin>
           <artifactId>maven-plugin-plugin</artifactId>
