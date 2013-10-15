@@ -1,11 +1,5 @@
 package com.github.marschall.jandex;
 
-import static java.nio.file.StandardOpenOption.CREATE;
-import static java.nio.file.StandardOpenOption.READ;
-import static java.nio.file.StandardOpenOption.WRITE;
-import static org.apache.maven.artifact.Artifact.SCOPE_COMPILE;
-import static org.apache.maven.artifact.Artifact.SCOPE_RUNTIME;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,7 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.Map;
 
 import org.apache.maven.artifact.Artifact;
@@ -35,6 +29,13 @@ import org.apache.maven.project.MavenProject;
 import org.jboss.jandex.Index;
 import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
+
+import static java.nio.file.FileVisitResult.CONTINUE;
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.READ;
+import static java.nio.file.StandardOpenOption.WRITE;
+import static org.apache.maven.artifact.Artifact.SCOPE_COMPILE;
+import static org.apache.maven.artifact.Artifact.SCOPE_RUNTIME;
 
 /**
  * Creates a Jandex index for 3rd party JARs.
@@ -114,8 +115,7 @@ public class ThirdPartyIndexer extends AbstractMojo {
   }
 
   private Index index(Path jar) throws IOException {
-    Map<String, String> env = new HashMap<>(1); 
-    env.put("create", "false");
+    Map<String, String> env = Collections.singletonMap("create", "false"); 
     // locate file system by using the syntax 
     // defined in java.net.JarURLConnection
     URI uri = URI.create("jar:" + jar.toUri());
@@ -141,7 +141,7 @@ public class ThirdPartyIndexer extends AbstractMojo {
               }
             }
           }
-          return FileVisitResult.CONTINUE;
+          return CONTINUE;
         }
       });
       return indexer.complete();
