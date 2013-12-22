@@ -36,12 +36,12 @@ import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
 
 @Mojo(name = "index",
-  threadSafe = true,
-  defaultPhase = PACKAGE)
+threadSafe = true,
+defaultPhase = PACKAGE)
 @Execute(goal = "index",
-  phase = PACKAGE)
+phase = PACKAGE)
 public class ArtifactIndexer extends AbstractMojo {
-  
+
 
   /**
    * The folder that contains the JARs which should be indexed.
@@ -53,7 +53,7 @@ public class ArtifactIndexer extends AbstractMojo {
   public void execute() throws MojoExecutionException, MojoFailureException {
     Path artifactPath = this.artifact.toPath();
     if (!Files.exists(artifactPath)) {
-        throw new MojoExecutionException("artifact " + this.artifact + " does not exists, run package first");
+      throw new MojoExecutionException("artifact " + this.artifact + " does not exists, run package first");
     }
     try {
       index(artifactPath);
@@ -61,7 +61,7 @@ public class ArtifactIndexer extends AbstractMojo {
       throw new MojoExecutionException("could not create indices", e);
     }
   }
-  
+
   public static void main(String[] args) throws MojoExecutionException, IOException {
     for (String arg : args) {
       ArtifactIndexer indexer = new ArtifactIndexer();
@@ -69,18 +69,18 @@ public class ArtifactIndexer extends AbstractMojo {
       indexer.index(indexer.artifact.toPath());
     }
   }
-  
+
   private boolean containsSubDeplyoments(String extension) {
     return "ear".equals(extension)
         || "war".equals(extension)
         || "rar".equals(extension);
   }
-  
+
   private boolean containsClasses(String extension) {
     return "jar".equals(extension)
         || "war".equals(extension);
   }
-  
+
   private void index(Path jar) throws IOException, MojoExecutionException {
     Map<String, String> env = Collections.singletonMap("create", "false"); 
     // locate file system by using the syntax 
@@ -113,24 +113,24 @@ public class ArtifactIndexer extends AbstractMojo {
       indexWriter.write(index);
     }
   }
-  
+
   private boolean containsIndex(FileSystem zipfs) {
     Path root = zipfs.getPath("/");
     Path jandexIdx = root.resolve("META-INF/jandex.idx");
-     return Files.exists(jandexIdx);
+    return Files.exists(jandexIdx);
   }
-  
+
   private void indexSubdeplyoments(String extension, FileSystem zipfs) throws IOException, MojoExecutionException {
     for (Path subdeployment : findSubdeployments(extension, zipfs)) {
       index(subdeployment);
     }
   }
-  
+
   private Collection<Path> findSubdeployments(String extension, FileSystem zipfs) throws IOException {
     List<Path> jars = new ArrayList<>();
     switch (extension) {
       case "ear":
-        addJarsIn(zipfs.getPath("/"), jars);
+        addJarsIn(zipfs.getPath("/"), jars, "*.{jar,war,rar}");
         // TODO configurable
         addJarsIn(zipfs.getPath("/lib/"), jars);
         return jars;
@@ -144,15 +144,19 @@ public class ArtifactIndexer extends AbstractMojo {
         throw new IllegalArgumentException("uknown deployment container: " + extension);
     }
   }
-  
+
   private void addJarsIn(Path path, List<? super Path> jars) throws IOException {
-    try (DirectoryStream<Path> stream = Files.newDirectoryStream(path, "*.jar")) {
+    addJarsIn(path, jars, "*.jar");
+  }
+  
+  private void addJarsIn(Path path, List<? super Path> jars, String pattern) throws IOException {
+    try (DirectoryStream<Path> stream = Files.newDirectoryStream(path, pattern)) {
       for (Path jar : stream) {
         jars.add(jar);
       }
     }
   }
-  
+
   private Index buildIndex(FileSystem zipfs) throws IOException {
     Path root = zipfs.getPath("/");
 
