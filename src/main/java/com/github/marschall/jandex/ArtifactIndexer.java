@@ -1,12 +1,15 @@
 package com.github.marschall.jandex;
 
 import static java.nio.file.FileVisitResult.CONTINUE;
+import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.READ;
+import static java.nio.file.StandardOpenOption.WRITE;
 import static org.apache.maven.plugins.annotations.LifecyclePhase.PACKAGE;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -15,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 
@@ -25,6 +29,7 @@ import org.apache.maven.plugins.annotations.Execute;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.jboss.jandex.Index;
+import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
 
 @Mojo(name = "index",
@@ -46,6 +51,11 @@ public class ArtifactIndexer extends AbstractMojo {
     Path artifactPath = this.artifact.toPath();
     if (!Files.exists(artifactPath)) {
         throw new MojoExecutionException("artifact " + this.artifact + " does not exists, run package first");
+    }
+    try {
+      index(artifactPath);
+    } catch (IOException e) {
+      throw new MojoExecutionException("could not create indices", e);
     }
   }
   
@@ -73,28 +83,57 @@ public class ArtifactIndexer extends AbstractMojo {
     String extension = fileName.substring(dotIndex + 1);
     try (FileSystem zipfs = FileSystems.newFileSystem(uri, env)) {
       if (containsClasses(extension)) {
-        Path root = zipfs.getPath("/");
-        Path jandexIdx = root.resolve("META-INF/jandex.idx");
-        if (!Files.exists(jandexIdx)) {
+        if (!containsIndex(zipfs)) {
           Index index = buildIndex(zipfs);
+          writeIndex(jar, index);
         }
       }
       if (containsSubDeplyoments(extension)) {
-        indexSubdeplyoments(zipfs);
+        indexSubdeplyoments(extension, zipfs);
       }
     }
   }
+
+  private void writeIndex(Path jar, Index index) throws IOException {
+    Path indexFile = jar.resolveSibling(jar.getFileName().toString() + ".index");
+    try (OutputStream outputStream = Files.newOutputStream(indexFile, WRITE, CREATE)) {
+      IndexWriter indexWriter = new IndexWriter(outputStream);
+      // IndexWriter does buffering
+      indexWriter.write(index);
+    }
+  }
   
-  private void indexSubdeplyoments(FileSystem zipfs) throws IOException {
-    
+  private boolean containsIndex(FileSystem zipfs) {
+    Path root = zipfs.getPath("/");
+    Path jandexIdx = root.resolve("META-INF/jandex.idx");
+     return Files.exists(jandexIdx);
+  }
+  
+  private void indexSubdeplyoments(String extension, FileSystem zipfs) throws IOException, MojoExecutionException {
+    for (Path subdeployment : findSubdeployments(extension, zipfs)) {
+      index(subdeployment);
+    }
+  }
+  
+  private Collection<Path> findSubdeployments(String extension, FileSystem zipfs) {
+    switch (extension) {
+      case "ear":
+        
+        break;
+      case "war":
+        
+        break;
+      case "rar":
+        
+        break;
+
+      default:
+        throw new IllegalArgumentException("uknown deployment container: " + extension);
+    }
   }
   
   private Index buildIndex(FileSystem zipfs) throws IOException {
     Path root = zipfs.getPath("/");
-    Path jandexIdx = root.resolve("META-INF/jandex.idx");
-    if (Files.exists(jandexIdx)) {
-      return null;
-    }
 
     final Indexer indexer = new Indexer();
     Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
