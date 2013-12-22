@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
+import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
@@ -18,8 +19,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.maven.plugin.AbstractMojo;
@@ -56,6 +59,14 @@ public class ArtifactIndexer extends AbstractMojo {
       index(artifactPath);
     } catch (IOException e) {
       throw new MojoExecutionException("could not create indices", e);
+    }
+  }
+  
+  public static void main(String[] args) throws MojoExecutionException, IOException {
+    for (String arg : args) {
+      ArtifactIndexer indexer = new ArtifactIndexer();
+      indexer.artifact = new File(arg);
+      indexer.index(indexer.artifact.toPath());
     }
   }
   
@@ -115,20 +126,30 @@ public class ArtifactIndexer extends AbstractMojo {
     }
   }
   
-  private Collection<Path> findSubdeployments(String extension, FileSystem zipfs) {
+  private Collection<Path> findSubdeployments(String extension, FileSystem zipfs) throws IOException {
+    List<Path> jars = new ArrayList<>();
     switch (extension) {
       case "ear":
-        
-        break;
+        addJarsIn(zipfs.getPath("/"), jars);
+        // TODO configurable
+        addJarsIn(zipfs.getPath("/lib/"), jars);
+        return jars;
       case "war":
-        
-        break;
+        addJarsIn(zipfs.getPath("/lib/"), jars);
+        return jars;
       case "rar":
-        
-        break;
-
+        addJarsIn(zipfs.getPath("/"), jars);
+        return jars;
       default:
         throw new IllegalArgumentException("uknown deployment container: " + extension);
+    }
+  }
+  
+  private void addJarsIn(Path path, List<? super Path> jars) throws IOException {
+    try (DirectoryStream<Path> stream = Files.newDirectoryStream(path, "*.jar")) {
+      for (Path jar : stream) {
+        jars.add(jar);
+      }
     }
   }
   
