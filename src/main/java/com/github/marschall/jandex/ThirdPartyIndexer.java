@@ -50,12 +50,12 @@ import static org.apache.maven.artifact.Artifact.SCOPE_RUNTIME;
  * @see https://github.com/jdcasey/jandex-maven-plugin
  * @see http://maven.apache.org/plugin-tools/maven-plugin-plugin/examples/using-annotations.html
  */
-@Mojo(name = "index",
-  threadSafe = true,
-  defaultPhase = LifecyclePhase.PREPARE_PACKAGE,
-  requiresDependencyCollection = ResolutionScope.COMPILE_PLUS_RUNTIME)
-@Execute(goal = "index",
-  phase = LifecyclePhase.PREPARE_PACKAGE)
+//@Mojo(name = "index",
+//  threadSafe = true,
+//  defaultPhase = LifecyclePhase.PREPARE_PACKAGE,
+//  requiresDependencyCollection = ResolutionScope.COMPILE_PLUS_RUNTIME)
+//@Execute(goal = "index",
+//  phase = LifecyclePhase.PREPARE_PACKAGE)
 public class ThirdPartyIndexer extends AbstractMojo {
 
   @Component
