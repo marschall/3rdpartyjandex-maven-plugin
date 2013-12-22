@@ -8,7 +8,7 @@
   <url>https://github.com/marschall/3rdpartyjandex-maven-plugin</url>
   <packaging>maven-plugin</packaging>
 
-  <name>3rd party Jandex wrapper for Maven</name>
+  <name>3rd Party Jandex Wrapper for Maven</name>
   
   <developers>
     <developer>

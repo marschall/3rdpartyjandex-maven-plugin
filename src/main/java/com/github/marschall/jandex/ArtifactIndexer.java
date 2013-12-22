@@ -36,10 +36,10 @@ import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
 
 @Mojo(name = "index",
-threadSafe = true,
-defaultPhase = PACKAGE)
+  threadSafe = true,
+  defaultPhase = PACKAGE)
 @Execute(goal = "index",
-phase = PACKAGE)
+  phase = PACKAGE)
 public class ArtifactIndexer extends AbstractMojo {
 
 
