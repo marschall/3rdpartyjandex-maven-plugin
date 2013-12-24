@@ -54,12 +54,11 @@ public class LameIndexer extends AbstractMojo {
 
   @Override
   public void execute() throws MojoExecutionException, MojoFailureException {
-    Path artifactPath = this.artifact.toPath();
-    if (!Files.exists(artifactPath)) {
+    if (!this.artifact.exists()) {
       throw new MojoExecutionException("artifact " + this.artifact + " does not exists, run package first");
     }
     try {
-      index(artifactPath);
+      index(this.artifact);
     } catch (IOException e) {
       throw new MojoExecutionException("could not create indices", e);
     }
@@ -69,7 +68,7 @@ public class LameIndexer extends AbstractMojo {
     for (String arg : args) {
       LameIndexer indexer = new LameIndexer();
       indexer.artifact = new File(arg);
-      indexer.index(indexer.artifact.toPath());
+      indexer.index(indexer.artifact);
     }
   }
 
@@ -82,6 +81,10 @@ public class LameIndexer extends AbstractMojo {
   private boolean containsClasses(String extension) {
     return "jar".equals(extension)
         || "war".equals(extension);
+  }
+  
+  private void index(File jar) throws MojoExecutionException, IOException {
+    index(new JarFile(jar));
   }
 
   private boolean index(JarFile jar) throws IOException, MojoExecutionException {
@@ -96,15 +99,18 @@ public class LameIndexer extends AbstractMojo {
     String extension = fileName.substring(dotIndex + 1);
     boolean changed = false;
     if (containsClasses(extension)) {
-      if (!containsIndex(zipfs)) {
-        Index index = buildIndex(zipfs);
+      if (!containsIndex(jar)) {
+        Index index = buildIndex(jar);
         writeIndex(jar, index);
         changed = true;
       }
     }
     if (containsSubDeplyoments(extension)) {
-      indexSubdeplyoments(extension, zipfs);
+      if (indexSubdeplyoments(extension, jar)) {
+        changed = true;
+      }
     }
+    return changed;
   }
 
   private void writeIndex(Path jar, Index index) throws IOException {
@@ -120,9 +126,9 @@ public class LameIndexer extends AbstractMojo {
     return jar.getEntry("META-INF/jandex.idx") != null;
   }
 
-  private boolean indexSubdeplyoments(String extension, FileSystem zipfs) throws IOException, MojoExecutionException {
+  private boolean indexSubdeplyoments(String extension, JarFile jar) throws IOException, MojoExecutionException {
     boolean changed = false;
-    for (Path subdeployment : findSubdeployments(extension, zipfs)) {
+    for (JarEntry subdeployment : findSubdeployments(extension, jar)) {
       boolean subDeploymentChanged = index(subdeployment);
       if (subDeploymentChanged) {
         // TODO update subdeployment
@@ -158,35 +164,15 @@ public class LameIndexer extends AbstractMojo {
     }
   }
 
-  private void addJarsIn(Path path, List<? super Path> jars, String pattern) throws IOException {
-    try (DirectoryStream<Path> stream = Files.newDirectoryStream(path, pattern)) {
-      for (Path jar : stream) {
-        jars.add(jar);
+  private Index buildIndex(JarFile jar) throws IOException {
+    final Indexer indexer = new Indexer();
+    for (JarEntry entry : asIterable(jar.entries())) {
+      if (entry.getName().endsWith(".jar")) {
+        try (InputStream inputStream = jar.getInputStream(entry)) {
+          indexer.index(inputStream);
+        }
       }
     }
-  }
-
-  private Index buildIndex(FileSystem zipfs) throws IOException {
-    Path root = zipfs.getPath("/");
-
-    final Indexer indexer = new Indexer();
-    Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
-
-
-      @Override
-      public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-        if (attrs.isRegularFile()) {
-          boolean isClass = file.getFileName().toString().endsWith(".class");
-          if (isClass) {
-            try (InputStream inputStream = Files.newInputStream(file, READ)) {
-              // indexer does buffering
-              indexer.index(inputStream);
-            }
-          }
-        }
-        return CONTINUE;
-      }
-    });
     return indexer.complete();
   }
   
