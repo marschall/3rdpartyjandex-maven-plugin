@@ -35,11 +35,14 @@ import org.jboss.jandex.Index;
 import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
 
-@Mojo(name = "index",
-  threadSafe = true,
-  defaultPhase = PACKAGE)
-@Execute(goal = "index",
-  phase = PACKAGE)
+/**
+ * 2nd attempt.
+ */
+//@Mojo(name = "index",
+//  threadSafe = true,
+//  defaultPhase = PACKAGE)
+//@Execute(goal = "index",
+//  phase = PACKAGE)
 public class ArtifactIndexer extends AbstractMojo {
 
 
@@ -85,7 +88,7 @@ public class ArtifactIndexer extends AbstractMojo {
     Map<String, String> env = Collections.singletonMap("create", "false"); 
     // locate file system by using the syntax 
     // defined in java.net.JarURLConnection
-    URI uri = URI.create("jar:" + jar.toUri());
+    URI uri = URI.create("zipfs:" + jar.toUri());
     String fileName = jar.getFileName().toString();
     int dotIndex = fileName.lastIndexOf('.');
     if (dotIndex == -1) {
@@ -95,7 +98,7 @@ public class ArtifactIndexer extends AbstractMojo {
     try (FileSystem zipfs = FileSystems.newFileSystem(uri, env)) {
       if (containsClasses(extension)) {
         if (!containsIndex(zipfs)) {
-          Index index = buildIndex(zipfs);
+          Index index = buildIndex(extension, zipfs);
           writeIndex(jar, index);
         }
       }
@@ -157,11 +160,11 @@ public class ArtifactIndexer extends AbstractMojo {
     }
   }
 
-  private Index buildIndex(FileSystem zipfs) throws IOException {
-    Path root = zipfs.getPath("/");
+  private Index buildIndex(String extension, FileSystem zipfs) throws IOException {
+    Path start = getStartPath(extension, zipfs);
 
     final Indexer indexer = new Indexer();
-    Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
+    Files.walkFileTree(start, new SimpleFileVisitor<Path>() {
 
 
       @Override
@@ -179,6 +182,14 @@ public class ArtifactIndexer extends AbstractMojo {
       }
     });
     return indexer.complete();
+  }
+  
+  private Path getStartPath(String extension, FileSystem zipfs) {
+    if (extension.equals(".war")) {
+      return zipfs.getPath("/WEB-INF/classes");
+    } else {
+      return zipfs.getPath("/");
+    }
   }
 
 
