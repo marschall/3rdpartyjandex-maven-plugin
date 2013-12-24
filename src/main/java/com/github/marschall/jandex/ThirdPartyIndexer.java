@@ -47,6 +47,8 @@ import static org.apache.maven.artifact.Artifact.SCOPE_RUNTIME;
  * <p>This is mostly interesting for WAR and EAR files that contain 3rd party
  * JARs in the <code>lib/</code> folder that aren't indexed with Jandex.</p>
  * 
+ * <p>1st attempt.</p>
+ * 
  * @see https://github.com/jdcasey/jandex-maven-plugin
  * @see http://maven.apache.org/plugin-tools/maven-plugin-plugin/examples/using-annotations.html
  */

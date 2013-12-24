@@ -22,8 +22,12 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Enumeration;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -35,16 +39,12 @@ import org.jboss.jandex.Index;
 import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
 
-/**
- * 2nd attempt.
- */
-//@Mojo(name = "index",
-//  threadSafe = true,
-//  defaultPhase = PACKAGE)
-//@Execute(goal = "index",
-//  phase = PACKAGE)
-public class ArtifactIndexer extends AbstractMojo {
-
+@Mojo(name = "index",
+threadSafe = true,
+defaultPhase = PACKAGE)
+@Execute(goal = "index",
+phase = PACKAGE)
+public class LameIndexer extends AbstractMojo {
 
   /**
    * The folder that contains the JARs which should be indexed.
@@ -67,7 +67,7 @@ public class ArtifactIndexer extends AbstractMojo {
 
   public static void main(String[] args) throws MojoExecutionException, IOException {
     for (String arg : args) {
-      ArtifactIndexer indexer = new ArtifactIndexer();
+      LameIndexer indexer = new LameIndexer();
       indexer.artifact = new File(arg);
       indexer.index(indexer.artifact.toPath());
     }
@@ -84,28 +84,26 @@ public class ArtifactIndexer extends AbstractMojo {
         || "war".equals(extension);
   }
 
-  private void index(Path jar) throws IOException, MojoExecutionException {
-    System.out.println("indexing: " + jar);
+  private boolean index(JarFile jar) throws IOException, MojoExecutionException {
     Map<String, String> env = Collections.singletonMap("create", "false"); 
     // locate file system by using the syntax 
     // defined in java.net.JarURLConnection
-    URI uri = URI.create("zipfs:" + jar.toUri());
-    String fileName = jar.getFileName().toString();
+    String fileName = jar.getName();
     int dotIndex = fileName.lastIndexOf('.');
     if (dotIndex == -1) {
       throw new MojoExecutionException("cold not determine type of artifact: " + jar);
     }
     String extension = fileName.substring(dotIndex + 1);
-    try (FileSystem zipfs = FileSystems.newFileSystem(uri, env)) {
-      if (containsClasses(extension)) {
-        if (!containsIndex(zipfs)) {
-          Index index = buildIndex(extension, zipfs);
-          writeIndex(jar, index);
-        }
+    boolean changed = false;
+    if (containsClasses(extension)) {
+      if (!containsIndex(zipfs)) {
+        Index index = buildIndex(zipfs);
+        writeIndex(jar, index);
+        changed = true;
       }
-      if (containsSubDeplyoments(extension)) {
-        indexSubdeplyoments(extension, zipfs);
-      }
+    }
+    if (containsSubDeplyoments(extension)) {
+      indexSubdeplyoments(extension, zipfs);
     }
   }
 
@@ -118,41 +116,48 @@ public class ArtifactIndexer extends AbstractMojo {
     }
   }
 
-  private boolean containsIndex(FileSystem zipfs) {
-    Path root = zipfs.getPath("/");
-    Path jandexIdx = root.resolve("META-INF/jandex.idx");
-    return Files.exists(jandexIdx);
+  private boolean containsIndex(JarFile jar) {
+    return jar.getEntry("META-INF/jandex.idx") != null;
   }
 
-  private void indexSubdeplyoments(String extension, FileSystem zipfs) throws IOException, MojoExecutionException {
+  private boolean indexSubdeplyoments(String extension, FileSystem zipfs) throws IOException, MojoExecutionException {
+    boolean changed = false;
     for (Path subdeployment : findSubdeployments(extension, zipfs)) {
-      index(subdeployment);
+      boolean subDeploymentChanged = index(subdeployment);
+      if (subDeploymentChanged) {
+        // TODO update subdeployment
+        changed = true;
+      }
     }
+    return changed;
   }
 
-  private Collection<Path> findSubdeployments(String extension, FileSystem zipfs) throws IOException {
-    List<Path> jars = new ArrayList<>();
+  private Collection<JarEntry> findSubdeployments(String extension, JarFile jar) throws IOException {
+    List<JarEntry> jars = new ArrayList<>();
     switch (extension) {
+      // TODO only check specific locations
       case "ear":
-        addJarsIn(zipfs.getPath("/"), jars, "*.{jar,war,rar}");
-        // TODO configurable
-        addJarsIn(zipfs.getPath("/lib/"), jars);
+        for (JarEntry entry : asIterable(jar.entries())) {
+          String entryName = entry.getName();
+          if (entryName.endsWith(".jar") || entryName.endsWith(".war") || entryName.endsWith(".rar")) {
+            jars.add(entry);
+          }
+        }
         return jars;
       case "war":
-        addJarsIn(zipfs.getPath("/lib/"), jars);
-        return jars;
       case "rar":
-        addJarsIn(zipfs.getPath("/"), jars);
+        for (JarEntry entry : asIterable(jar.entries())) {
+          String entryName = entry.getName();
+          if (entryName.endsWith(".jar")) {
+            jars.add(entry);
+          }
+        }
         return jars;
       default:
         throw new IllegalArgumentException("uknown deployment container: " + extension);
     }
   }
 
-  private void addJarsIn(Path path, List<? super Path> jars) throws IOException {
-    addJarsIn(path, jars, "*.jar");
-  }
-  
   private void addJarsIn(Path path, List<? super Path> jars, String pattern) throws IOException {
     try (DirectoryStream<Path> stream = Files.newDirectoryStream(path, pattern)) {
       for (Path jar : stream) {
@@ -161,11 +166,11 @@ public class ArtifactIndexer extends AbstractMojo {
     }
   }
 
-  private Index buildIndex(String extension, FileSystem zipfs) throws IOException {
-    Path start = getStartPath(extension, zipfs);
+  private Index buildIndex(FileSystem zipfs) throws IOException {
+    Path root = zipfs.getPath("/");
 
     final Indexer indexer = new Indexer();
-    Files.walkFileTree(start, new SimpleFileVisitor<Path>() {
+    Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
 
 
       @Override
@@ -185,13 +190,48 @@ public class ArtifactIndexer extends AbstractMojo {
     return indexer.complete();
   }
   
-  private Path getStartPath(String extension, FileSystem zipfs) {
-    if (extension.equals(".war")) {
-      return zipfs.getPath("/WEB-INF/classes");
-    } else {
-      return zipfs.getPath("/");
-    }
+  private static <T> Iterable<T> asIterable(Enumeration<T> enumeration) {
+    return new IterableAdapter<>(new EnermerationAdapter<>(enumeration));
   }
 
+  static final class IterableAdapter<T> implements Iterable<T> {
+
+    private final Iterator<T> iterator;
+
+    IterableAdapter(Iterator<T> iterator) {
+      this.iterator = iterator;
+    }
+
+    @Override
+    public Iterator<T> iterator() {
+      return this.iterator;
+    }
+
+  }
+
+  static final class EnermerationAdapter<E> implements Iterator<E> {
+
+    private final Enumeration<E> enumeration;
+
+    EnermerationAdapter(Enumeration<E> enumeration) {
+      this.enumeration = enumeration;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return this.enumeration.hasMoreElements();
+    }
+
+    @Override
+    public E next() {
+      return this.enumeration.nextElement();
+    }
+
+    @Override
+    public void remove() {
+      throw new UnsupportedOperationException("remove");
+    }
+
+  }
 
 }

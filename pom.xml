@@ -1,4 +1,5 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.github.marschall</groupId>
@@ -8,8 +9,11 @@
   <url>https://github.com/marschall/3rdpartyjandex-maven-plugin</url>
   <packaging>maven-plugin</packaging>
 
-  <name>3rd Party Jandex Wrapper for Maven</name>
-  
+  <name>3rd Party Jandex Indexer for Maven</name>
+  <description>
+    Builds Jandex indices for 3rd party artifacts.
+  </description>
+
   <developers>
     <developer>
       <id>marschall</id>
@@ -19,7 +23,7 @@
       <url>https://github.com/marschall</url>
     </developer>
   </developers>
-  
+
   <licenses>
     <license>
       <name>MIT</name>
@@ -27,7 +31,7 @@
       <distribution>repo</distribution>
     </license>
   </licenses>
-  
+
   <scm>
     <connection>scm:git:git@github.com:marschall/3rdpartyjandex-maven-plugin.git</connection>
     <developerConnection>scm:git:git@github.com:marschall/3rdpartyjandex-maven-plugin.git</developerConnection>
@@ -36,6 +40,11 @@
   </scm>
 
   <dependencies>
+    <dependency>
+      <groupId>com.github.marschall</groupId>
+      <artifactId>zipfilesystem-standalone</artifactId>
+      <version>1.0.1-SNAPSHOT</version>
+    </dependency>
     <dependency>
       <groupId>org.apache.maven</groupId>
       <artifactId>maven-plugin-api</artifactId>
@@ -46,8 +55,8 @@
       <groupId>org.apache.maven.plugin-tools</groupId>
       <artifactId>maven-plugin-annotations</artifactId>
       <version>3.2</version>
-      <!-- annotations are not needed for plugin execution so you can remove this dependency
-           for execution with using provided scope -->
+      <!-- annotations are not needed for plugin execution so you can remove 
+        this dependency for execution with using provided scope -->
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -69,7 +78,7 @@
       <version>1.1.0.Final</version>
     </dependency>
   </dependencies>
-  
+
   <build>
     <plugins>
       <plugin>
@@ -149,10 +158,10 @@
       </plugins>
     </pluginManagement>
   </build>
-  
+
   <properties>
     <project.reporting.outputEncoding>utf-8</project.reporting.outputEncoding>
     <project.build.sourceEncoding>utf-8</project.build.sourceEncoding>
   </properties>
-  
+
 </project>
