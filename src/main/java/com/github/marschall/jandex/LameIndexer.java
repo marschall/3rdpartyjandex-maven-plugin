@@ -1,33 +1,25 @@
 package com.github.marschall.jandex;
 
-import static java.nio.file.FileVisitResult.CONTINUE;
-import static java.nio.file.StandardOpenOption.CREATE;
-import static java.nio.file.StandardOpenOption.READ;
-import static java.nio.file.StandardOpenOption.WRITE;
 import static org.apache.maven.plugins.annotations.LifecyclePhase.PACKAGE;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.URI;
-import java.nio.file.DirectoryStream;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.jar.JarInputStream;
+import java.util.jar.JarOutputStream;
+import java.util.zip.ZipEntry;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -82,15 +74,14 @@ public class LameIndexer extends AbstractMojo {
     return "jar".equals(extension)
         || "war".equals(extension);
   }
-  
-  private void index(File jar) throws MojoExecutionException, IOException {
-    index(new JarFile(jar));
+
+  private void index(File file) throws MojoExecutionException, IOException {
+    try (JarFile jar = new JarFile(file)) {
+      index(jar);
+    }
   }
 
-  private boolean index(JarFile jar) throws IOException, MojoExecutionException {
-    Map<String, String> env = Collections.singletonMap("create", "false"); 
-    // locate file system by using the syntax 
-    // defined in java.net.JarURLConnection
+  private LameIndex index(JarFile jar) throws IOException, MojoExecutionException {
     String fileName = jar.getName();
     int dotIndex = fileName.lastIndexOf('.');
     if (dotIndex == -1) {
@@ -98,24 +89,63 @@ public class LameIndexer extends AbstractMojo {
     }
     String extension = fileName.substring(dotIndex + 1);
     boolean changed = false;
+    Index index = null;
     if (containsClasses(extension)) {
       if (!containsIndex(jar)) {
-        Index index = buildIndex(jar);
-        writeIndex(jar, index);
+        index = buildIndex(jar);
         changed = true;
       }
     }
+    
+    List<SubDeploymentIndex> subDeploymentIndexs;
     if (containsSubDeplyoments(extension)) {
-      if (indexSubdeplyoments(extension, jar)) {
+      subDeploymentIndexs = indexSubdeplyoments(extension, jar);
+      if (!subDeploymentIndexs.isEmpty()) {
         changed = true;
       }
+    } else {
+      subDeploymentIndexs = Collections.emptyList();
     }
-    return changed;
+    return new LameIndex(index, changed, subDeploymentIndexs);
   }
 
-  private void writeIndex(Path jar, Index index) throws IOException {
-    Path indexFile = jar.resolveSibling(jar.getFileName().toString() + ".index");
-    try (OutputStream outputStream = Files.newOutputStream(indexFile, WRITE, CREATE)) {
+  private LameResult index(JarFile jar, JarEntry jarEntry) throws IOException, MojoExecutionException {
+    String name = jarEntry.getName();
+    int dotIndex = name.lastIndexOf('.');
+    String suffix = name.substring(dotIndex - 1);
+    String prefix = name.substring(name.lastIndexOf('/'), dotIndex);
+    Path tempPath = Files.createTempFile(prefix, suffix);
+    File tempFile = tempPath.toFile();
+    try (InputStream input = jar.getInputStream(jarEntry)) {
+      // Files.copy will do the buffering
+      Files.copy(input, tempPath);
+      try (JarFile tempJar = new JarFile(tempFile)) {
+        LameIndex lameIndex = index(tempJar);
+        return new LameResult(tempFile, lameIndex.changed, lameIndex.index);
+      }
+    }
+  }
+
+  private void writeIndex(File input, File outPut, String entryName, Index index) throws IOException {
+    try (
+        JarInputStream inputStream = new JarInputStream(new FileInputStream(input));
+        JarOutputStream outputStream = new JarOutputStream(new FileOutputStream(outPut), inputStream.getManifest())) {
+      JarEntry entry = inputStream.getNextJarEntry();
+      byte[] buffer = new byte[8192];
+      while (entry != null) {
+        // TODO should we keep META-INF/INDEX.LIST or drop it? should be first entry
+        outputStream.putNextEntry(entry);
+        int read;
+        while ((read = inputStream.read(buffer)) != -1) {
+          outputStream.write(buffer, 0, read);
+        }
+      }
+      entry = inputStream.getNextJarEntry();
+      
+      String indexFile =  entryName + ".index";
+      JarEntry indexEntry = new JarEntry(indexFile);
+      indexEntry.setMethod(ZipEntry.DEFLATED);
+      outputStream.putNextEntry(indexEntry);
       IndexWriter indexWriter = new IndexWriter(outputStream);
       // IndexWriter does buffering
       indexWriter.write(index);
@@ -126,16 +156,15 @@ public class LameIndexer extends AbstractMojo {
     return jar.getEntry("META-INF/jandex.idx") != null;
   }
 
-  private boolean indexSubdeplyoments(String extension, JarFile jar) throws IOException, MojoExecutionException {
-    boolean changed = false;
+  private List<SubDeploymentIndex> indexSubdeplyoments(String extension, JarFile jar) throws IOException, MojoExecutionException {
+    List<SubDeploymentIndex> subDeploymentIndices = new ArrayList<>();
     for (JarEntry subdeployment : findSubdeployments(extension, jar)) {
-      boolean subDeploymentChanged = index(subdeployment);
-      if (subDeploymentChanged) {
-        // TODO update subdeployment
-        changed = true;
+      LameResult result = index(jar, subdeployment);
+      if (result.changed) {
+        subDeploymentIndices.add(new SubDeploymentIndex(subdeployment, result.index));
       }
     }
-    return changed;
+    return subDeploymentIndices;
   }
 
   private Collection<JarEntry> findSubdeployments(String extension, JarFile jar) throws IOException {
@@ -175,7 +204,7 @@ public class LameIndexer extends AbstractMojo {
     }
     return indexer.complete();
   }
-  
+
   private static <T> Iterable<T> asIterable(Enumeration<T> enumeration) {
     return new IterableAdapter<>(new EnermerationAdapter<>(enumeration));
   }
@@ -191,6 +220,45 @@ public class LameIndexer extends AbstractMojo {
     @Override
     public Iterator<T> iterator() {
       return this.iterator;
+    }
+  }
+
+  static final class LameResult {
+
+    final File file;
+    final boolean changed;
+    final Index index;
+
+    LameResult(File file, boolean changed, Index index) {
+      this.file = file;
+      this.changed = changed;
+      this.index = index;
+    }
+
+  }
+  
+  static final class LameIndex {
+    
+    final Index index;
+    final boolean changed;
+    final List<SubDeploymentIndex> subDeploymentIndices;
+    
+    LameIndex(Index index, boolean changed, List<SubDeploymentIndex> subDeploymentIndices) {
+      this.index = index;
+      this.changed = changed;
+      this.subDeploymentIndices = subDeploymentIndices;
+    }
+    
+  }
+
+  static final class SubDeploymentIndex {
+
+    final JarEntry subDeployment;
+    final Index index;
+
+    SubDeploymentIndex(JarEntry subDeployment, Index index) {
+      this.subDeployment = subDeployment;
+      this.index = index;
     }
 
   }
