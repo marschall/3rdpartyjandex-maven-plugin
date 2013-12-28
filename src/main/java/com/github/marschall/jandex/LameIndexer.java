@@ -31,11 +31,13 @@ import org.jboss.jandex.Index;
 import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
 
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+
 @Mojo(name = "index",
-threadSafe = true,
-defaultPhase = PACKAGE)
+  threadSafe = true,
+  defaultPhase = PACKAGE)
 @Execute(goal = "index",
-phase = PACKAGE)
+  phase = PACKAGE)
 public class LameIndexer extends AbstractMojo {
 
   /**
@@ -124,14 +126,20 @@ public class LameIndexer extends AbstractMojo {
     // prefix -> "spring"
     String name = jarEntry.getName();
     int dotIndex = name.lastIndexOf('.');
-    String suffix = name.substring(dotIndex - 1);
-    String prefix = name.substring(name.lastIndexOf('/'), dotIndex);
+    String suffix = name.substring(dotIndex);
+    int slashIndex = name.lastIndexOf('/');
+    String prefix;
+    if (slashIndex == -1) {
+      prefix = name.substring(0, dotIndex);
+    } else {
+      prefix = name.substring(slashIndex + 1, dotIndex);
+    }
 
     Path tempPath = Files.createTempFile(prefix, suffix);
     File tempFile = tempPath.toFile();
     try (InputStream input = jar.getInputStream(jarEntry)) {
       // Files.copy will do the buffering
-      Files.copy(input, tempPath);
+      Files.copy(input, tempPath, REPLACE_EXISTING);
     }
     LameIndex lameIndex;
     try (JarFile tempJar = new JarFile(tempFile)) {
@@ -151,8 +159,14 @@ public class LameIndexer extends AbstractMojo {
     if (dotIndex == -1) {
       throw new AssertionError("missing extension from: " + entryName);
     }
-    String prefix = entryName.substring(0, dotIndex);
-    String suffix = entryName.substring(dotIndex - 1);
+    String suffix = entryName.substring(dotIndex);
+    int slashIndex = entryName.lastIndexOf('/');
+    String prefix;
+    if (slashIndex == -1) {
+      prefix = entryName.substring(0, dotIndex);
+    } else {
+      prefix = entryName.substring(slashIndex + 1, dotIndex);
+    }
     File indexedJar = File.createTempFile(prefix, suffix);
 
     try (
@@ -167,8 +181,8 @@ public class LameIndexer extends AbstractMojo {
         while ((read = inputStream.read(buffer)) != -1) {
           outputStream.write(buffer, 0, read);
         }
+        entry = inputStream.getNextJarEntry();
       }
-      entry = inputStream.getNextJarEntry();
 
       // REVIEW: more or less reuse?
       IndexWriter indexWriter = new IndexWriter(outputStream);
