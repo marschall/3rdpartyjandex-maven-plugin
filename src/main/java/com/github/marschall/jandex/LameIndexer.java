@@ -75,6 +75,7 @@ public class LameIndexer extends AbstractMojo {
         || "war".equals(extension);
   }
 
+
   private void index(File file) throws MojoExecutionException, IOException {
     try (JarFile jar = new JarFile(file)) {
       index(jar);
@@ -96,40 +97,67 @@ public class LameIndexer extends AbstractMojo {
         changed = true;
       }
     }
-    
-    List<SubDeploymentIndex> subDeploymentIndexs;
+
+    List<LameSubDeploymentIndex> resultIndices;
     if (containsSubDeplyoments(extension)) {
-      subDeploymentIndexs = indexSubdeplyoments(extension, jar);
+      List<SubDeploymentIndex> subDeploymentIndexs = indexSubdeplyoments(extension, jar);
       if (!subDeploymentIndexs.isEmpty()) {
+        resultIndices = new ArrayList<>(subDeploymentIndexs.size());
         changed = true;
+        for (SubDeploymentIndex each : subDeploymentIndexs) {
+          Index subDeploymentIndex = each.index;
+          String subDeploymentName = each.subDeployment.getName();
+          resultIndices.add(new LameSubDeploymentIndex(subDeploymentName, subDeploymentIndex));
+        }
+      } else {
+        resultIndices = Collections.emptyList();
       }
     } else {
-      subDeploymentIndexs = Collections.emptyList();
+      resultIndices = Collections.emptyList();
     }
-    return new LameIndex(index, changed, subDeploymentIndexs);
+    return new LameIndex(index, changed, resultIndices);
   }
 
   private LameResult index(JarFile jar, JarEntry jarEntry) throws IOException, MojoExecutionException {
+    // lib/spring.jar
+    // suffix -> ".jar
+    // prefix -> "spring"
     String name = jarEntry.getName();
     int dotIndex = name.lastIndexOf('.');
     String suffix = name.substring(dotIndex - 1);
     String prefix = name.substring(name.lastIndexOf('/'), dotIndex);
+
     Path tempPath = Files.createTempFile(prefix, suffix);
     File tempFile = tempPath.toFile();
     try (InputStream input = jar.getInputStream(jarEntry)) {
       // Files.copy will do the buffering
       Files.copy(input, tempPath);
-      try (JarFile tempJar = new JarFile(tempFile)) {
-        LameIndex lameIndex = index(tempJar);
-        return new LameResult(tempFile, lameIndex.changed, lameIndex.index);
-      }
+    }
+    LameIndex lameIndex;
+    try (JarFile tempJar = new JarFile(tempFile)) {
+      lameIndex = index(tempJar);
+    }
+    boolean changed = lameIndex.changed;
+    if (changed) {
+      tempFile = writeIndexes(tempFile, name, lameIndex.subDeploymentIndices);
+      return new LameResult(tempFile, true, lameIndex.index);
+    } else {
+      return new LameResult(null, false, null);
     }
   }
 
-  private void writeIndex(File input, File outPut, String entryName, Index index) throws IOException {
+  private File writeIndexes(File jar, String entryName, List<LameSubDeploymentIndex> subDeploymentIndices) throws IOException {
+    int dotIndex = entryName.lastIndexOf('.');
+    if (dotIndex == -1) {
+      throw new AssertionError("missing extension from: " + entryName);
+    }
+    String prefix = entryName.substring(0, dotIndex);
+    String suffix = entryName.substring(dotIndex - 1);
+    File indexedJar = File.createTempFile(prefix, suffix);
+
     try (
-        JarInputStream inputStream = new JarInputStream(new FileInputStream(input));
-        JarOutputStream outputStream = new JarOutputStream(new FileOutputStream(outPut), inputStream.getManifest())) {
+        JarInputStream inputStream = new JarInputStream(new FileInputStream(jar));
+        JarOutputStream outputStream = new JarOutputStream(new FileOutputStream(indexedJar), inputStream.getManifest())) {
       JarEntry entry = inputStream.getNextJarEntry();
       byte[] buffer = new byte[8192];
       while (entry != null) {
@@ -141,15 +169,19 @@ public class LameIndexer extends AbstractMojo {
         }
       }
       entry = inputStream.getNextJarEntry();
-      
-      String indexFile =  entryName + ".index";
-      JarEntry indexEntry = new JarEntry(indexFile);
-      indexEntry.setMethod(ZipEntry.DEFLATED);
-      outputStream.putNextEntry(indexEntry);
+
+      // REVIEW: more or less reuse?
       IndexWriter indexWriter = new IndexWriter(outputStream);
-      // IndexWriter does buffering
-      indexWriter.write(index);
+      for (LameSubDeploymentIndex subDeploymentIndex : subDeploymentIndices) {
+        String indexFile =  subDeploymentIndex.name + ".index";
+        JarEntry indexEntry = new JarEntry(indexFile);
+        indexEntry.setMethod(ZipEntry.DEFLATED);
+        outputStream.putNextEntry(indexEntry);
+        // IndexWriter does buffering
+        indexWriter.write(subDeploymentIndex.index);
+      }
     }
+    return indexedJar;
   }
 
   private boolean containsIndex(JarFile jar) {
@@ -236,19 +268,31 @@ public class LameIndexer extends AbstractMojo {
     }
 
   }
-  
+
   static final class LameIndex {
-    
+
     final Index index;
     final boolean changed;
-    final List<SubDeploymentIndex> subDeploymentIndices;
-    
-    LameIndex(Index index, boolean changed, List<SubDeploymentIndex> subDeploymentIndices) {
+    final List<LameSubDeploymentIndex> subDeploymentIndices;
+
+    LameIndex(Index index, boolean changed, List<LameSubDeploymentIndex> subDeploymentIndices) {
       this.index = index;
       this.changed = changed;
       this.subDeploymentIndices = subDeploymentIndices;
     }
-    
+
+  }
+
+  static final class LameSubDeploymentIndex {
+
+    final String name;
+    final Index index;
+
+    LameSubDeploymentIndex(String name, Index index) {
+      this.name = name;
+      this.index = index;
+    }
+
   }
 
   static final class SubDeploymentIndex {
