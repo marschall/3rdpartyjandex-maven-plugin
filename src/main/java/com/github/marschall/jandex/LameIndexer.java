@@ -85,8 +85,13 @@ public class LameIndexer extends AbstractMojo {
     try (JarFile jar = new JarFile(file)) {
       index = index(jar);
     }
-    System.out.println(index.changed);
-    System.out.println(index.subDeploymentIndices);
+    boolean changed = index.changed;
+    if (changed) {
+      File tempFile = writeIndexes(file, file.getName(), index.subDeploymentIndices);
+      file.delete();
+      tempFile.renameTo(file);
+    }
+    
   }
 
   private LameIndex index(JarFile jar) throws IOException, MojoExecutionException {
@@ -208,6 +213,9 @@ public class LameIndexer extends AbstractMojo {
               actualSize += read;
             }
             
+            System.out.println("encountered fucked up entry: " + entry.getName() + " in: " + entryName
+                + " reported size: " + entry.getSize() + " actual size: " + actualSize);
+            
             unfucked.setMethod(entry.getMethod());
             unfucked.setComment(entry.getComment());
             unfucked.setExtra(unfucked.getExtra());
@@ -252,6 +260,7 @@ public class LameIndexer extends AbstractMojo {
     for (JarEntry subdeployment : findSubdeployments(extension, jar)) {
       LameResult result = index(jar, subdeployment);
       if (result.changed) {
+        // TODO file change has to be propagated
         subDeploymentIndices.add(new SubDeploymentIndex(subdeployment, result.index));
       }
     }
