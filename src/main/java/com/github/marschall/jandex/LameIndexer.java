@@ -201,7 +201,7 @@ public class LameIndexer extends AbstractMojo {
           } else {
             JarEntry unfucked = new JarEntry(entry.getName());
             if (bos == null) {
-              bos = new ByteArrayOutputStream(512); // 410 instead of 408
+              bos = new ByteArrayOutputStream(1024);
             } else {
               bos.reset();
             }
@@ -294,9 +294,9 @@ public class LameIndexer extends AbstractMojo {
   }
 
   private Index buildIndex(JarFile jar) throws IOException {
-    final Indexer indexer = new Indexer();
+    Indexer indexer = new Indexer();
     for (JarEntry entry : asIterable(jar.entries())) {
-      if (entry.getName().endsWith(".jar")) {
+      if (entry.getName().endsWith(".class")) {
         try (InputStream inputStream = jar.getInputStream(entry)) {
           indexer.index(inputStream);
         }
