@@ -49,8 +49,8 @@ import static org.apache.maven.artifact.Artifact.SCOPE_RUNTIME;
  * 
  * <p>1st attempt.</p>
  * 
- * @see https://github.com/jdcasey/jandex-maven-plugin
- * @see http://maven.apache.org/plugin-tools/maven-plugin-plugin/examples/using-annotations.html
+ * @see <a href="https://github.com/jdcasey/jandex-maven-plugin">jdcasey/jandex-maven-plugin</a>
+ * @see <a href="http://maven.apache.org/plugin-tools/maven-plugin-plugin/examples/using-annotations.html">Using Plugin Tools Java5 Annotations</a>
  */
 //@Mojo(name = "index",
 //  threadSafe = true,
