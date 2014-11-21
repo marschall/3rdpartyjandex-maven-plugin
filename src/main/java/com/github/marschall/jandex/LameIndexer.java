@@ -1,5 +1,6 @@
 package com.github.marschall.jandex;
 
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static org.apache.maven.plugins.annotations.LifecyclePhase.PACKAGE;
 
 import java.io.ByteArrayOutputStream;
@@ -14,8 +15,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarInputStream;
@@ -32,8 +35,6 @@ import org.apache.maven.plugins.annotations.Parameter;
 import org.jboss.jandex.Index;
 import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
-
-import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 @Mojo(name = "index",
   threadSafe = true,
@@ -119,7 +120,15 @@ public class LameIndexer extends AbstractMojo {
         for (SubDeploymentIndex each : subDeploymentIndexs) {
           Index subDeploymentIndex = each.index;
           String subDeploymentName = each.subDeployment.getName();
-          resultIndices.add(new LameSubDeploymentIndex(subDeploymentName, subDeploymentIndex));
+          File subDepolyentFile;
+          int subDeploymentDotIndex = subDeploymentName.lastIndexOf('.');
+          String subDeploymentExtension = subDeploymentName.substring(subDeploymentDotIndex + 1);
+          if (containsSubDeplyoments(subDeploymentExtension)) {
+            subDepolyentFile = each.file;
+          } else {
+            subDepolyentFile = null;
+          }
+          resultIndices.add(new LameSubDeploymentIndex(subDeploymentName, subDeploymentIndex, subDepolyentFile));
         }
       } else {
         resultIndices = Collections.emptyList();
@@ -163,6 +172,17 @@ public class LameIndexer extends AbstractMojo {
       return new LameResult(null, false, null);
     }
   }
+  
+  private Map<String, File> buildReplacementMap(List<LameSubDeploymentIndex> subDeploymentIndices) {
+    Map<String, File> replacementMap = new HashMap<>(subDeploymentIndices.size());
+    for (LameSubDeploymentIndex subDeploymentIndex : subDeploymentIndices) {
+      File file = subDeploymentIndex.file;
+      if (file != null) {
+        replacementMap.put(subDeploymentIndex.name, file);
+      }
+    }
+    return replacementMap;
+  }
 
   private File writeIndexes(File jar, String entryName, List<LameSubDeploymentIndex> subDeploymentIndices) throws IOException {
     int dotIndex = entryName.lastIndexOf('.');
@@ -182,6 +202,7 @@ public class LameIndexer extends AbstractMojo {
     try (
         JarInputStream inputStream = new JarInputStream(new FileInputStream(jar))) {
       Manifest manifest = inputStream.getManifest();
+      Map<String, File> replacementMap = this.buildReplacementMap(subDeploymentIndices);
       try (FileOutputStream fileOutputStream = new FileOutputStream(indexedJar);
           JarOutputStream outputStream = manifest != null ? new JarOutputStream(fileOutputStream, manifest) : new JarOutputStream(fileOutputStream)) {
         JarEntry entry = inputStream.getNextJarEntry();
@@ -191,17 +212,34 @@ public class LameIndexer extends AbstractMojo {
           // TODO should we keep META-INF/INDEX.LIST or drop it? should be first entry
           boolean isFuckedUpIbm = isFuckedUpIbmMqSeriesEntry(entryName, entry);
           if (!isFuckedUpIbm) {
-            outputStream.putNextEntry(entry);
-            if (entry.getSize() != 0L) {
-              int read;
-              while ((read = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, read);
+            File replacement = replacementMap.get(entryName);
+            if (replacement == null) {
+              outputStream.putNextEntry(entry);
+              if (entry.getSize() != 0L) {
+                int read;
+                while ((read = inputStream.read(buffer)) != -1) {
+                  outputStream.write(buffer, 0, read);
+                }
+              }
+              
+            } else {
+              // some subdeployments (eg WAR in EAR) have changed and we need to replace them
+              JarEntry replaced = safeCopy(entry);
+              replaced.setSize(replacement.length());
+              outputStream.putNextEntry(replaced);
+              try (InputStream input = new FileInputStream(replacement)) {
+                int read;
+                while ((read = inputStream.read(buffer)) != -1) {
+                  outputStream.write(buffer, 0, read);
+                }
               }
             }
+            
           } else {
-            JarEntry unfucked = new JarEntry(entry.getName());
+            // some JARs in the IBM RAR are fucked up
+            // the size of certain file in the central directory index is wrong
             if (bos == null) {
-              bos = new ByteArrayOutputStream(512); // 410 instead of 408
+              bos = new ByteArrayOutputStream(1024);
             } else {
               bos.reset();
             }
@@ -216,10 +254,7 @@ public class LameIndexer extends AbstractMojo {
             System.out.println("encountered fucked up entry: " + entry.getName() + " in: " + entryName
                 + " reported size: " + entry.getSize() + " actual size: " + actualSize);
             
-            unfucked.setMethod(entry.getMethod());
-            unfucked.setComment(entry.getComment());
-            unfucked.setExtra(unfucked.getExtra());
-            unfucked.setTime(unfucked.getTime());
+            JarEntry unfucked = safeCopy(entry);
             unfucked.setSize(actualSize);
             outputStream.putNextEntry(unfucked);
             bos.writeTo(outputStream);
@@ -242,6 +277,15 @@ public class LameIndexer extends AbstractMojo {
     return indexedJar;
   }
 
+  private JarEntry safeCopy(JarEntry original) {
+    JarEntry copy = new JarEntry(original.getName());
+    copy.setMethod(original.getMethod());
+    copy.setComment(original.getComment());
+    copy.setExtra(copy.getExtra());
+    copy.setTime(copy.getTime());
+    return copy;
+  }
+
   private boolean isFuckedUpIbmMqSeriesEntry(String entryName, JarEntry entry) {
     return ("META-INF/MANIFEST.MF".equals(entry.getName()) && "com.ibm.mq.jmqi.jar".equals(entryName))
       || ("META-INF/MANIFEST.MF".equals(entry.getName()) && "com.ibm.mqjms.jar".equals(entryName))
@@ -250,9 +294,7 @@ public class LameIndexer extends AbstractMojo {
   }
 
   private boolean containsIndex(JarFile jar) {
-    // FIXME
-//    return jar.getEntry("META-INF/jandex.idx") != null;
-    return false;
+    return jar.getEntry("META-INF/jandex.idx") != null;
   }
 
   private List<SubDeploymentIndex> indexSubdeplyoments(String extension, JarFile jar) throws IOException, MojoExecutionException {
@@ -260,8 +302,7 @@ public class LameIndexer extends AbstractMojo {
     for (JarEntry subdeployment : findSubdeployments(extension, jar)) {
       LameResult result = index(jar, subdeployment);
       if (result.changed) {
-        // TODO file change has to be propagated
-        subDeploymentIndices.add(new SubDeploymentIndex(subdeployment, result.index));
+        subDeploymentIndices.add(new SubDeploymentIndex(subdeployment, result.index, result.file));
       }
     }
     return subDeploymentIndices;
@@ -294,9 +335,9 @@ public class LameIndexer extends AbstractMojo {
   }
 
   private Index buildIndex(JarFile jar) throws IOException {
-    final Indexer indexer = new Indexer();
+    Indexer indexer = new Indexer();
     for (JarEntry entry : asIterable(jar.entries())) {
-      if (entry.getName().endsWith(".jar")) {
+      if (entry.getName().endsWith(".class")) {
         try (InputStream inputStream = jar.getInputStream(entry)) {
           indexer.index(inputStream);
         }
@@ -355,10 +396,12 @@ public class LameIndexer extends AbstractMojo {
 
     final String name;
     final Index index;
+    final File file;
 
-    LameSubDeploymentIndex(String name, Index index) {
+    LameSubDeploymentIndex(String name, Index index, File subDepolyentFile) {
       this.name = name;
       this.index = index;
+      this.file = subDepolyentFile;
     }
 
   }
@@ -367,10 +410,12 @@ public class LameIndexer extends AbstractMojo {
 
     final JarEntry subDeployment;
     final Index index;
+    final File file;
 
-    SubDeploymentIndex(JarEntry subDeployment, Index index) {
+    SubDeploymentIndex(JarEntry subDeployment, Index index, File file) {
       this.subDeployment = subDeployment;
       this.index = index;
+      this.file = file;
     }
 
   }
