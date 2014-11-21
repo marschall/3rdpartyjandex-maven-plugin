@@ -46,7 +46,7 @@ public class LameIndexer extends AbstractMojo {
   /**
    * The folder that contains the JARs which should be indexed.
    */
-  @Parameter(defaultValue = "${project.build.directory}/${project.build.finalName}")
+  @Parameter(defaultValue = "${project.build.directory}/${project.build.finalName}.${project.packaging}")
   private File artifact;
 
   @Override
