@@ -15,7 +15,7 @@ What does it work with?
 -----------------------
 EARs, WARs and RARs.
 
-It modify 3rd party JARs?
+Does it modify 3rd party JARs?
 -------------------------
 No, only 3rd party RARs and WARs are modified.
 
