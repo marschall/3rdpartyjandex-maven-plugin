@@ -23,7 +23,7 @@
       <id>marschall</id>
       <name>Philippe Marschall</name>
       <email>philippe.marschall@gmail.com</email>
-      <timezone>+1</timezone>
+      <timezone>Europe/Zurich</timezone>
       <url>https://github.com/marschall</url>
     </developer>
   </developers>
@@ -36,8 +36,13 @@
     </license>
   </licenses>
 
+  <issueManagement>
+    <system>GitHub</system>
+    <url>https://github.com/marschall/3rdpartyjandex-maven-plugin/issues</url>
+  </issueManagement>
+
   <scm>
-    <connection>scm:git:git@github.com:marschall/3rdpartyjandex-maven-plugin.git</connection>
+    <connection>scm:git:https://github.com/marschall/3rdpartyjandex-maven-plugin.git</connection>
     <developerConnection>scm:git:git@github.com:marschall/3rdpartyjandex-maven-plugin.git</developerConnection>
     <url>${project.url}</url>
     <tag>HEAD</tag>
@@ -74,6 +79,23 @@
       <version>2.1.3.Final</version>
     </dependency>
   </dependencies>
+
+  <distributionManagement>
+    <snapshotRepository>
+      <id>sonatype-nexus-snapshots</id>
+      <name>Sonatype Nexus Snapshots</name>
+      <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+    </snapshotRepository>
+    <repository>
+      <id>sonatype-nexus-staging</id>
+      <name>Nexus Release Repository</name>
+      <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+    </repository>
+    <site>
+      <id>gh-pages</id>
+      <url>${project.scm.developerConnection}</url>
+    </site>
+  </distributionManagement>
 
   <build>
     <plugins>
@@ -121,11 +143,48 @@
         <executions>
           <execution>
             <id>attach-javadocs</id>
+            <phase>package</phase>
             <goals>
               <goal>jar</goal>
             </goals>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-scm-publish-plugin</artifactId>
+        <configuration>
+          <scmBranch>gh-pages</scmBranch>
+          <pubScmUrl>${project.scm.developerConnection}</pubScmUrl>
+          <content>${project.reporting.outputDirectory}</content>
+          <!-- 
+          <content>${project.build.directory}/site</content>
+           -->
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>publish-scm</goal>
+            </goals>
+            <phase>site-deploy</phase>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-site-plugin</artifactId>
+        <configuration>
+          <!-- We are deploying site using scm-publish, not site-deploy... -->
+          <skipDeploy>true</skipDeploy>
+        </configuration>
+      </plugin>
+      <plugin>
+        <artifactId>maven-release-plugin</artifactId>
+        <configuration>
+          <mavenExecutorId>forked-path</mavenExecutorId>
+          <arguments>-Pdeploy-to-sonatype-oss</arguments>
+          <!-- causes the tag to be named -SNAPSHOT
+          <tag>${project.version}</tag>
+           -->
+        </configuration>
       </plugin>
     </plugins>
     <pluginManagement>
