@@ -116,7 +116,7 @@ public class ThirdPartyJandexIndexer extends AbstractMojo {
     Files.copy(file.toPath(), repackaged.toPath());
     Path tempDirectory = Files.createTempDirectory("3rdpartyjandex-maven-plugin");
     try {
-      unzipJars(file.toPath(), tempDirectory);
+      unzipJars(repackaged.toPath(), tempDirectory);
       List<Path> indices = this.indexJars(tempDirectory);
       this.addIndices(repackaged.toPath(), tempDirectory, indices);
       return repackaged;
@@ -142,13 +142,13 @@ public class ThirdPartyJandexIndexer extends AbstractMojo {
 
       @Override
       public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-        Path fileName = file.getFileName();
+        String fileName = file.getFileName().toString();
         boolean isJar = fileName.endsWith(".jar");
         if (isJar) {
           try (FileSystem zipFileSystem = newZipFileSystem(file, false)) {
             if (!hasIndex(zipFileSystem)) {
               Indexer indexer = ThirdPartyJandexIndexer.indexJar(zipFileSystem);
-              Path index = file.getParent().resolve(fileName.toString() + ".index");
+              Path index = file.getParent().resolve(fileName + ".index");
               ThirdPartyJandexIndexer.writeIndex(indexer, index);
               indices.add(index);
             }
@@ -185,7 +185,7 @@ public class ThirdPartyJandexIndexer extends AbstractMojo {
 
   private static void writeIndex(Indexer indexer, Path target) throws IOException {
     try (BufferedOutputStream indexOut = new BufferedOutputStream(Files.newOutputStream(target))) {
-      IndexWriter writer = new IndexWriter( indexOut );
+      IndexWriter writer = new IndexWriter(indexOut);
       Index index = indexer.complete();
       writer.write( index );
     }
@@ -244,7 +244,7 @@ public class ThirdPartyJandexIndexer extends AbstractMojo {
 
         @Override
         public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-          boolean isJar = file.getFileName().endsWith(".jar");
+          boolean isJar = file.getFileName().toString().endsWith(".jar");
           if (isJar) {
             Path relative = zipRoot.relativize(file);
             Path targetPath = targetDirectory.resolve(relative.toString());
