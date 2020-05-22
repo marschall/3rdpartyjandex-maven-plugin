@@ -111,7 +111,7 @@ public class ThirdPartyJandexIndexer extends AbstractMojo {
   }
 
   private File repackage(File file) throws IOException {
-    File repackaged = new File(this.outputDirectory, this.finalName + "-indexed" + this.project.getPackaging());
+    File repackaged = new File(this.outputDirectory, this.finalName + "-indexed." + this.project.getPackaging());
     Files.copy(file.toPath(), repackaged.toPath());
     Path tempDirectory = Files.createTempDirectory("3rdpartyjandex-maven-plugin");
     try {
