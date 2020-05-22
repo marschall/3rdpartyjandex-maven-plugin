@@ -88,6 +88,7 @@ public class ThirdPartyJandexIndexer extends AbstractMojo {
   public void execute() throws MojoExecutionException, MojoFailureException {
     if (this.skip) {
       this.getLog().info("skipping plugin execution");
+      return;
     }
     String packaging = this.project.getPackaging();
     if (!SUPPORTED_PACKAGINGS.contains(packaging)) {
