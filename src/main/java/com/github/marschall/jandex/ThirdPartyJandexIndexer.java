@@ -187,7 +187,7 @@ public class ThirdPartyJandexIndexer extends AbstractMojo {
     try (BufferedOutputStream indexOut = new BufferedOutputStream(Files.newOutputStream(target))) {
       IndexWriter writer = new IndexWriter(indexOut);
       Index index = indexer.complete();
-      writer.write( index );
+      writer.write(index);
     }
   }
 
@@ -306,14 +306,14 @@ public class ThirdPartyJandexIndexer extends AbstractMojo {
   }
 
   static FileSystem newZipFileSystem(Path path, boolean create) throws IOException {
-    Map<String, String> env = Collections.singletonMap("create", Boolean.toString(create));
-    URI fileUri = path.toUri();
     URI zipUri;
+    String uriString = "jar:" + path.toUri();
     try {
-      zipUri = new URI("jar:" + fileUri.getScheme(), fileUri.getPath(), null);
+      zipUri = new URI(uriString);
     } catch (URISyntaxException e) {
-      throw new IOException("invalid uri syntax:" + fileUri, e);
+      throw new IOException("invalid uri syntax:" + uriString, e);
     }
+    Map<String, String> env = Collections.singletonMap("create", Boolean.toString(create));
     return FileSystems.newFileSystem(zipUri, env);
   }
 
