@@ -1,6 +1,15 @@
 package com.github.marschall.jandex;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
 import java.io.File;
+import java.nio.file.FileSystem;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -36,6 +45,23 @@ public class ThirdPartyJandexIndexerTests {
 
     MavenExecutionResult result = execution.execute("clean", "package");
     result.assertErrorFreeLog();
+
+    File target = new File(basedir, "target");
+    File artifactFile = new File(target, "project-to-test-1.0-SNAPSHOT-indexed.war");
+    assertTrue(artifactFile.exists());
+
+    try (FileSystem zipFileSystem = ThirdPartyJandexIndexer.newZipFileSystem(artifactFile.toPath(), false);
+         Stream<Path> pathStream = Files.walk(zipFileSystem.getPath("/"), 3)) {
+      List<Path> jars = pathStream
+          .filter(path -> Files.isRegularFile(path))
+          .filter(path -> path.getFileName().toString().endsWith(".jar"))
+          .collect(Collectors.toList());
+      assertEquals(10, jars.size());
+      for (Path jar : jars) {
+        Path index = jar.resolveSibling(jar.getFileName() + ".index");
+        assertTrue(Files.exists(index));
+      }
+    }
   }
 
 }
