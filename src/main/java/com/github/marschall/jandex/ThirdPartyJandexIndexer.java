@@ -30,6 +30,7 @@ import org.apache.maven.artifact.Artifact;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
@@ -37,6 +38,7 @@ import org.apache.maven.project.MavenProject;
 import org.jboss.jandex.Index;
 import org.jboss.jandex.IndexWriter;
 import org.jboss.jandex.Indexer;
+import org.sonatype.plexus.build.incremental.BuildContext;
 
 /**
  * Creates a Jandex index for 3rd party JARs.
@@ -84,10 +86,16 @@ public class ThirdPartyJandexIndexer extends AbstractMojo {
   @Parameter(property = "thirdpartyjandexindexer.repackage.skip", defaultValue = "false")
   private boolean skip;
 
+  @Component
+  private BuildContext buildContext;
+
   @Override
   public void execute() throws MojoExecutionException, MojoFailureException {
     if (this.skip) {
       this.getLog().info("skipping plugin execution");
+      return;
+    }
+    if (!this.buildContext.hasDelta("pom.xml")) {
       return;
     }
     String packaging = this.project.getPackaging();
@@ -97,12 +105,14 @@ public class ThirdPartyJandexIndexer extends AbstractMojo {
     }
 
     Artifact sourceArtifact = this.getSourceArtifact();
+    File sourceArtifactFile = sourceArtifact.getFile();
 
     File repackaged;
     try {
-      repackaged = this.repackage(sourceArtifact.getFile());
+      repackaged = this.repackage(sourceArtifactFile);
     } catch (IOException e) {
-      throw new MojoExecutionException("could not repackage file: " + sourceArtifact.getFile(), e);
+      this.buildContext.addMessage(sourceArtifactFile, 0, 0, ROLE, BuildContext.SEVERITY_ERROR, e);
+      throw new MojoExecutionException("could not repackage file: " + sourceArtifactFile, e);
     }
     sourceArtifact.setFile(repackaged);
   }
@@ -250,36 +260,6 @@ public class ThirdPartyJandexIndexer extends AbstractMojo {
             Path targetPath = targetDirectory.resolve(relative.toString());
             Files.copy(file, targetPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
           }
-          return CONTINUE;
-        }
-
-      });
-    }
-  }
-
-  static void unzip(Path zipFile, Path targetDirectory) throws IOException {
-    try (FileSystem zipFileSystem = newZipFileSystem(zipFile, false)) {
-
-      Path zipRoot = zipFileSystem.getPath("/");
-      Files.walkFileTree(zipRoot, new SimpleFileVisitor<Path>() {
-
-        @Override
-        public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-          Path relative = zipRoot.relativize(dir);
-          Path targetPath = targetDirectory.resolve(relative.toString());
-          if (!Files.exists(targetPath)) {
-            Files.createDirectory(targetPath);
-          }
-
-          return CONTINUE;
-        }
-
-        @Override
-        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-          Path relative = zipRoot.relativize(file);
-          Path targetPath = targetDirectory.resolve(relative.toString());
-          Files.copy(file, targetPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
-
           return CONTINUE;
         }
 
