@@ -3,7 +3,7 @@
 
   <groupId>com.github.marschall</groupId>
   <artifactId>3rdpartyjandex-maven-plugin</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1-SNAPSHOT</version>
   <inceptionYear>2012</inceptionYear>
   <url>https://github.com/marschall/3rdpartyjandex-maven-plugin</url>
   <packaging>maven-plugin</packaging>
@@ -44,7 +44,7 @@
     <connection>scm:git:https://github.com/marschall/3rdpartyjandex-maven-plugin.git</connection>
     <developerConnection>scm:git:git@github.com:marschall/3rdpartyjandex-maven-plugin.git</developerConnection>
     <url>${project.url}</url>
-    <tag>1.0.0</tag>
+    <tag>HEAD</tag>
   </scm>
 
   <dependencies>
